@@ -65,13 +65,30 @@ function git_clone_checkout {
 
     pushd ${OPERATOR_BASE_DIR}
 
-    echo "Cloning repo: git clone ${git_opts} ${branch} ${repo} ${operator}-operator"
-    git clone ${git_opts} ${branch} ${repo} ${operator}-operator
-    if [ -n "${hash}" ]; then
-        pushd ${operator}-operator
-        echo "Running checkout: git checkout ${hash}"
-        git checkout ${hash}
-        popd
+    # Some operators contain controllers for multiple services and not all 
+    # are enabled by default. e.g. infra-operator has memcached, dns, etc.
+    # The result is that the cleanup rules for a given service target break
+    # the other operators because they wipe out the path that contains
+    # the CR for the original target.
+    if [ -z "${ALT_REPO}"];
+    then
+        echo "Cloning repo: git clone ${git_opts} ${branch} ${repo} ${operator}-operator"
+        git clone ${git_opts} ${branch} ${repo} ${operator}-operator
+        if [ -n "${hash}" ]; then
+            pushd ${operator}-operator
+            echo "Running checkout: git checkout ${hash}"
+            git checkout ${hash}
+            popd
+        fi
+    else
+        echo "Cloning repo: git clone ${git_opts} ${branch} ${repo} ${operator}-operator into ${operator}-operator-${ALT_REPO}"
+        git clone ${git_opts} ${branch} ${repo} ${operator}-operator-${ALT_REPO}
+        if [ -n "${hash}" ]; then
+            pushd ${operator}-operator-${ALT_REPO}
+            echo "Running checkout: git checkout ${hash}"
+            git checkout ${hash}
+            popd
+        fi
     fi
 
     popd

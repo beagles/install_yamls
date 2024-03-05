@@ -272,6 +272,12 @@ IRONIC_KUTTL_CONF      ?= ${OPERATOR_BASE_DIR}/ironic-operator/kuttl-test.yaml
 IRONIC_KUTTL_DIR       ?= ${OPERATOR_BASE_DIR}/ironic-operator/tests/kuttl/tests
 IRONIC_KUTTL_NAMESPACE ?= ironic-kuttl-tests
 
+# Redis
+# REDIS_IMG     ?= (this is unused because this is part of infra operator)
+REDIS           ?= config/samples/redis_v1beta1_redis.yaml
+REDIS_CR        ?= ${OPERATOR_BASE_DIR}/infra-operator/${REDIS}
+REDIS_DEPL_IMG  ?= unused
+
 # Octavia
 OCTAVIA_IMG             ?= quay.io/openstack-k8s-operators/octavia-operator-index:${OPENSTACK_K8S_TAG}
 OCTAVIA_REPO            ?= https://github.com/openstack-k8s-operators/octavia-operator.git
@@ -1495,6 +1501,36 @@ ironic_deploy_cleanup: namespace ## cleans up the service instance, Does not aff
 	${CLEANUP_DIR_CMD} ${OPERATOR_BASE_DIR}/ironic-operator ${DEPLOY_DIR}
 	oc rsh -t $(DBSERVICE_CONTAINER) mysql -u root --password=${PASSWORD} -e "flush tables; drop database if exists ironic;" || true
 	oc rsh -t $(DBSERVICE_CONTAINER) mysql -u root --password=${PASSWORD} -e "flush tables; drop database if exists ironic_inspector;" || true
+
+##@ REDIS
+.PHONY: redis_deploy_prep
+redis_deploy_prep: export KIND=Redis
+redis_deploy_prep: export NAME=redis
+redis_deploy_prep: export IMAGE=${REDIS_DEPL_IMG}
+redis_deploy_prep: export REPO=${INFRA_REPO}
+redis_deploy_prep: export BRANCH=${INFRA_BRANCH}
+redis_deploy_prep: export HASH=${INFRA_COMMIT_HASH}
+redis_deploy_prep: export ALT_REPO=redis
+redis_deploy_prep: redis_deploy_cleanup ## prepares the CR to install the service based on the service sample file REDIS
+	$(eval $(call vars,$@,infra))
+	bash scripts/clone-operator-repo.sh
+
+	$(eval $(call vars,$@,infra-redis))
+	mkdir -p ${OPERATOR_DIR} ${DEPLOY_DIR}
+	cp ${REDIS_CR} ${DEPLOY_DIR}
+	bash scripts/gen-service-kustomize.sh
+
+.PHONY: redis_deploy
+redis_deploy: input redis_deploy_prep ## installs the service instance using kustomize. Runs prep step in advance. Set INFRA_REPO and INFRA_BRANCH to deploy from a custom repo.
+	$(eval $(call vars,$@,infra-redis))
+	bash scripts/operator-deploy-resources.sh
+
+.PHONY: redis_deploy_cleanup
+redis_deploy_cleanup: namespace ## installs the service instance using kustomize. Runs prep step in advance. Set INFRA_REPO and INFRA_BRANCH to deploy from a custom repo.
+	$(eval $(call vars,$@,infra-redis))
+	oc kustomize ${DEPLOY_DIR} | oc delete --ignore-not-found=true -f -
+	${CLEANUP_DIR_CMD} ${OPERATOR_BASE_DIR}/infra-operator-redis ${DEPLOY_DIR}
+
 
 ##@ OCTAVIA
 .PHONY: octavia_prep
